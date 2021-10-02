@@ -2,6 +2,7 @@ from simpleimage import SimpleImage
 import PIL
 from PIL import Image
 import requests
+import math
 
 prompt = input("Is it a nasa provided image or raw area footage?(input y if it's a nasa provided image)")
 if prompt == "y" or prompt =="Y":
@@ -11,11 +12,11 @@ else:
 DEFAULT_FILE = 'random-fire.jpeg'
 
 ANALYSED_AREA = {
-    "California": ["California", 36.66, 36.42, -118.98, -118.57, 36.543243, -118.6897886, 959.97],
-    "Brazil": ["Brazil", -19.77, -19.52, -57.79, -57.33, -19.5665646, -57.6757788, 1454.45],
-    "Botswana": ["Botswana", -23.643, -23.106, 23.281, 22.358, -23.4556454, 22.9898493, 5655.85],
-    "Australia": ["Australia", -17.173, -16.957, 145.08, 144.682, -16.9898988, 144.784783984, 1013.16],
-    "Saskatchewan": ["Saskatchewan", 53.424, 53.097, -103.045, -102.489, 53.2343432, -102.987878, 1344.37]
+    "California": ["California", 36.66, 36.42, -118.98, -118.57, 36.543243, -118.6897886, 959.97, "north-east", 382.765, 52.34],
+    "Brazil": ["Brazil", -19.77, -19.52, -57.79, -57.33, -19.5665646, -57.6757788, 1454.45, "north_west", 874.891, 92.75],
+    "Botswana": ["Botswana", -23.643, -23.106, 23.281, 22.358, -23.4556454, 22.9898493, 5655.85, "south", 984.252, 58.84],
+    "Australia": ["Australia", -17.173, -16.957, 145.08, 144.682, -16.9898988, 144.784783984, 1013.16, "south", 492.126, 39.67],
+    "Saskatchewan": ["Saskatchewan", 53.424, 53.097, -103.045, -102.489, 53.2343432, -102.987878, 1344.37, "north-west", 929.571, 39.23]
 }
 
 
@@ -25,7 +26,7 @@ def main():
     filename = get_file()
     image = SimpleImage(filename[0])
 
-    distance = get_distance()
+    distance = get_distance(filename[1])
 
     # Show the original fire
     original_fire = SimpleImage(filename[0])
@@ -36,7 +37,7 @@ def main():
     image_list = [highlighted_fire]
 
     # identifies the direction of fire propagation
-    direction = determine_direction()
+    direction = determine_direction(filename[1])
 
     # mark the danger zone
     marked_image = mark_image(highlighted_fire, direction, image_list, distance)
@@ -70,15 +71,28 @@ def main():
 
     print(danger_prompt)
 
-    area_burned = area_determiner(locate_the_user, image_list)
+    area_burned = area_determiner(locate_the_user, image_list, filename[1])
 
-    print('The total percentage of area burning is ' + str(area_burned[0]) + "%.")
-    print('The total percentage of area that may burn is ' + str(area_burned[1]) + "%.")
+    print('The total area burning is ' + str(area_burned[0]) + " square kilometers.")
+    print('The total area that may burn is ' + str(area_burned[1]) + " square kilometers.")
 
 
-def get_distance():
-    distance = 50
-    return distance
+def get_distance(filename):
+    velocity = input('Enter the wind velocity in feet per second(or press enter for default): ')
+    hours = input("Input the required hour of which you want to see the prediction(click enter for one day.")
+    if hours == "":
+        hours = 24
+    if velocity == '' and ANALYSED_AREA.get(filename) is None:
+        velocity = 500
+    elif velocity == '' and ANALYSED_AREA.get(filename) is not None:
+        velocity = ANALYSED_AREA[filename][9]
+    spread_per_minute = (3.14 * (10 ** -3)) * (float(velocity) ** 1.37) * (1.12 ** -0.398)
+    print(spread_per_minute)
+    distance = spread_per_minute * 60 * float(hours) / 3280.84
+    distance_pix = round((distance / ANALYSED_AREA[filename][10]) * 1280)
+    print(distance)
+    print(distance_pix)
+    return distance_pix
 
 
 def mark_image(image, direction, image_list, distance):
@@ -735,11 +749,13 @@ def get_file():
     return ["images/" + filename, filename]
 
 
-def determine_direction():
+def determine_direction(filename):
     # Read image file path from user, or use the default file
     direction = input('Enter the direction for fire propagation(or press enter for default): ')
-    if direction == '':
+    if direction == '' and ANALYSED_AREA.get(filename) is None:
         direction = "south-east"
+    elif direction == '' and ANALYSED_AREA.get(filename) is not None:
+        direction = ANALYSED_AREA[filename][8]
     return direction
 
 
@@ -1002,7 +1018,7 @@ def user_danger_tracking(image, a, b, lst):
     return prompt
 
 
-def area_determiner(image, image_list):
+def area_determiner(image, image_list, filename):
     burn_list = []
     red_pixels = 0
     total_pixels = 0
@@ -1012,7 +1028,7 @@ def area_determiner(image, image_list):
         if pixel.red >= average * INTENSITY_THRESHOLD:
             red_pixels += 1
         total_pixels += 1
-    total_area_burning = (red_pixels / total_pixels) * 100
+    total_area_burning = (red_pixels / total_pixels) * ANALYSED_AREA[filename][7]
     burn_list.append(total_area_burning)
 
     for x in range(image.width):
@@ -1021,7 +1037,7 @@ def area_determiner(image, image_list):
             pixel1 = image_list[1].get_pixel(x, y)
             if pixel.red == pixel1.red and pixel.green == pixel1.green:
                 yel_pix += 1
-    area_to_be_burned = (yel_pix / total_pixels) * 100
+    area_to_be_burned = (yel_pix / total_pixels) * ANALYSED_AREA[filename][7]
     burn_list.append(area_to_be_burned)
     return burn_list
 
